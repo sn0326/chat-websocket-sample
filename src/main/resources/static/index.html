@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Chat Application</title>
+	<script src="/js/sockjs.min.js"></script>
+	<script src="/js/stomp.min.js"></script>
+	<script>
+		var stompClient = null;
+
+		function connect() {
+			var socket = new SockJS('/chat');
+			stompClient = Stomp.over(socket);
+			stompClient.connect({}, function (frame) {
+				// 接続したら、ボタンなどを無効化
+				disable('connect');
+				disable('from');
+				disable('to');
+
+				// ログ
+				console.log('Connected: ' + frame);
+
+				// 待ち受けを開始する
+				var from = document.getElementById('from').value
+				var to = document.getElementById('to').value
+				stompClient.subscribe('/topic/messages/' + encodeURIComponent(from) + '/' + encodeURIComponent(to), function (message) {
+					showMessage(JSON.parse(message.body));
+				});
+			});
+			reloadMessage();
+
+		}
+
+		function sendMessage() {
+			var from = document.getElementById('from').value;
+			var to = document.getElementById('to').value;
+			var content = document.getElementById('content').value;
+			var id = encodeURIComponent(from) + '/' + encodeURIComponent(to);
+			var message = {'id': id, 'from': from, 'to': to, 'content': content};
+			stompClient.send("/app/send", {}, JSON.stringify(message));
+			// 送信したら、メッセージフィールドは空にする
+			document.getElementById('content').value = '';
+			// 自身が送信したメッセージを表示
+			showMessage(message);
+		}
+
+		function showMessage(message) {
+			var response = document.getElementById('response');
+			var p = document.createElement('p');
+			p.style.wordWrap = 'break-word';
+			p.appendChild(document.createTextNode(message.from + ": " + message.content));
+			response.appendChild(p);
+		}
+
+		function disable(id) {
+			const obj = document.getElementById(id);
+			obj.disabled = true;
+		}
+
+		function reloadMessage() {
+			// 既存のメッセージを削除
+			var response = document.getElementById('response');
+			var clone = response.cloneNode(false);
+			response.parentNode.replaceChild(clone, response);
+			
+			var from = document.getElementById('from').value
+			var to = document.getElementById('to').value
+			fetch("/api/chat/" + encodeURIComponent(from) + '/' + encodeURIComponent(to))
+				.then(response => response.json())
+				.then(json => {
+					for (const m of json) {
+						showMessage(m);
+					}
+				});
+		}
+	</script>
+</head>
+
+<body>
+	<div>
+		<div>
+			<label for="from">from:</label>
+			<input type="text" id="from" name="from">
+		</div>
+		<div>
+			<label for="to">To:</label>
+			<input type="text" id="to" name="to">
+		</div>
+		<div>
+			<button id="connect" name="connect" onclick="connect()">Connect</button>
+		</div>
+		<div>
+			<label for="content">Message:</label>
+			<input type="text" id="content" name="content" maxlength="200">
+		</div>
+		<div>
+			<button onclick="sendMessage()">Send</button>
+		</div>
+		<div>
+			<button onclick="reloadMessage()">Reload</button>
+		</div>
+	</div>
+	<div id="response"></div>
+</body>
+
+</html>
